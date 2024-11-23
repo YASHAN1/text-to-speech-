@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text to Speech Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(45deg, #ffffff, #37c3e6);
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .text-input {
+            width: 100%;
+            height: 150px;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            resize: none;
+            font-size: 16px;
+        }
+
+        .text-input:focus {
+            outline: none;
+            border-color: #2193b0;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        select {
+            padding: 8px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            flex: 1;
+        }
+
+        .button-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            background: #2193b0;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s ease;
+            flex: 1;
+        }
+
+        .btn:hover {
+            background: #1a7289;
+        }
+
+        .btn:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .status {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            min-height: 20px;
+        }
+
+        #downloadLink {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Text to Speech Generator</h1>
+        <textarea class="text-input" placeholder="Enter text to convert to speech..."></textarea>
+        <div class="controls">
+            <select id="voices"></select>
+            <select id="speed">
+                <option value="0.5">0.5x</option>
+                <option value="0.75">0.75x</option>
+                <option value="1" selected>1x</option>
+                <option value="1.25">1.25x</option>
+                <option value="1.5">1.5x</option>
+                <option value="2">2x</option>
+            </select>
+        </div>
+        <div class="button-container">
+            <button class="btn" onclick="speak()">Speak</button>
+            <button class="btn" onclick="downloadSpeech()">Download</button>
+        </div>
+        <p class="status" id="status"></p>
+        <a id="downloadLink" download="speech.mp3"></a>
+    </div>
+
+    <script>
+        let speechSynth = window.speechSynthesis;
+        let voices = [];
+
+        // Populate voices dropdown
+        function loadVoices() {
+            voices = speechSynth.getVoices();
+            const voiceSelect = document.getElementById('voices');
+            voiceSelect.innerHTML = '';
+            
+            voices.forEach((voice, index) => {
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = `${voice.name} (${voice.lang})`;
+                voiceSelect.appendChild(option);
+            });
+        }
+
+        // Load voices when they're ready
+        speechSynth.onvoiceschanged = loadVoices;
+        loadVoices();
+
+        function speak() {
+            const text = document.querySelector('.text-input').value;
+            const status = document.getElementById('status');
+            
+            if (!text) {
+                status.textContent = 'Please enter some text to speak';
+                return;
+            }
+
+            // Cancel any ongoing speech
+            speechSynth.cancel();
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            const voiceIndex = document.getElementById('voices').value;
+            const speed = document.getElementById('speed').value;
+
+            utterance.voice = voices[voiceIndex];
+            utterance.rate = parseFloat(speed);
+
+            utterance.onstart = () => {
+                status.textContent = 'Speaking...';
+                document.querySelector('.btn').disabled = true;
+            };
+
+            utterance.onend = () => {
+                status.textContent = 'Finished speaking';
+                document.querySelector('.btn').disabled = false;
+            };
+
+            utterance.onerror = () => {
+                status.textContent = 'Error occurred while speaking';
+                document.querySelector('.btn').disabled = false;
+            };
+
+            speechSynth.speak(utterance);
+        }
+
+        async function downloadSpeech() {
+            const text = document.querySelector('.text-input').value;
+            const status = document.getElementById('status');
+            
+            if (!text) {
+                status.textContent = 'Please enter some text to download';
+                return;
+            }
+
+            try {
+                status.textContent = 'Preparing download...';
+                
+                // Create audio context and media stream
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const mediaStreamDestination = audioContext.createMediaStreamDestination();
+                const mediaRecorder = new MediaRecorder(mediaStreamDestination.stream);
+                const audioChunks = [];
+
+                // Set up media recorder
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });
+                    const downloadLink = document.getElementById('downloadLink');
+                    downloadLink.href = URL.createObjectURL(audioBlob);
+                    downloadLink.click();
+                    status.textContent = 'Download completed!';
+                };
+
+                // Start recording
+                mediaRecorder.start();
+
+                // Create speech
+                const utterance = new SpeechSynthesisUtterance(text);
+                const voiceIndex = document.getElementById('voices').value;
+                const speed = document.getElementById('speed').value;
+
+                utterance.voice = voices[voiceIndex];
+                utterance.rate = parseFloat(speed);
+
+                utterance.onend = () => {
+                    mediaRecorder.stop();
+                };
+
+                // Connect audio nodes
+                const source = audioContext.createBufferSource();
+                source.connect(mediaStreamDestination);
+                source.start();
+
+                // Speak the text
+                speechSynth.speak(utterance);
+
+            } catch (error) {
+                status.textContent = 'Error creating download: ' + error.message;
+                console.error('Download error:', error);
+            }
+        }
+    </script>
+</body>
+</html>
